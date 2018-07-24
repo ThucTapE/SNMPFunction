@@ -13,6 +13,7 @@ import org.snmp4j.Target;
 import org.snmp4j.TransportMapping;
 import org.snmp4j.event.ResponseEvent;
 import org.snmp4j.mp.SnmpConstants;
+import org.snmp4j.security.SNMPv3SecurityModel;
 import org.snmp4j.smi.Address;
 import org.snmp4j.smi.GenericAddress;
 import org.snmp4j.smi.Integer32;
@@ -25,184 +26,152 @@ import org.snmp4j.util.TreeEvent;
 import org.snmp4j.util.TreeUtils;
 
 public class SNMPFunction {
-public static void main(String[] args) throws Exception {
-		
+	public static CommunityTarget initTarget(String community,String ip, String port,String version ) throws Exception {
 		CommunityTarget target = new CommunityTarget();
-		target.setCommunity(new OctetString("idv90we3rnov90wer"));
-		target.setAddress(GenericAddress.parse("udp:10.10.1.94/161")); // supply your own IP and port
+		target.setCommunity(new OctetString(community));
+		target.setAddress(GenericAddress.parse("udp:"+ip+"/"+port));
+		target.setRetries(2);
+		target.setTimeout(1500);
+		if(version.equals("version1")) 
+			target.setVersion(SnmpConstants.version1);
+		else if(version.equals("version3"))
+			target.setVersion(SnmpConstants.version3);
+		else 
+			target.setVersion(SnmpConstants.version2c);
+		return target;
+	}
+	public static CommunityTarget initTargetDefaultCommunityString(String ip, String port, String version) throws Exception{
+		CommunityTarget target = new CommunityTarget();
+		target.setCommunity(new OctetString("public"));
+		target.setAddress(GenericAddress.parse("udp:"+ip+"/"+port));
+		target.setRetries(2);
+		target.setTimeout(1500);
+		if(version.equals("version1")) 
+			target.setVersion(SnmpConstants.version1);
+		else if(version.equals("version2c"))
+			target.setVersion(SnmpConstants.version2c);
+		else
+			target.setVersion(SnmpConstants.version3);
+		return target;
+	}
+	public static CommunityTarget initTargetDefaultVersion(String community,String ip, String port) throws Exception{
+		CommunityTarget target = new CommunityTarget();
+		target.setCommunity(new OctetString(community));
+		target.setAddress(GenericAddress.parse("udp:"+ip+"/"+port));
 		target.setRetries(2);
 		target.setTimeout(1500);
 		target.setVersion(SnmpConstants.version2c);
-		
-		
-		//Map<String, String> result = doWalk(".1.3.6.1.2.1", target); // ifTable, mib-2 interfaces
-		//snmpwalk
-		/*
-		for (Map.Entry<String, String> entry : result.entrySet()) {
-			System.out.println( entry.getKey() +" ---- "+entry.getValue());
-			
-		}
-		*/
-		//test get
-		//snmpGet(target,".1.3.6.1.2.1.6.2.0");
-		
-		//test getNext
-		//snmGetNext(target, ".1.3.6.1.2.1.6.2.0");
-		
-		//test 
-		//snmpSet(target, ".1.3.6.1.2.1.6.2.0", "200");
-		
-		//test getBulk
-		/*
-		VariableBinding[] array = {new VariableBinding(new OID(".1.3.6.1.2.1.7")),
-                new VariableBinding(new OID(".1.3.6.1.2.1.7.1.0")),
-               // new VariableBinding(new OID("1.3.6.1.4.1.2000.1.3.1.1.10")),
-                //new VariableBinding(new OID("1.3.6.1.4.1.2000.1.2.5.1.19"))
-                };
-		Vector<? extends VariableBinding> vbs = getBulk(target, array);
-		if(vbs == null) 
-			System.out.println("Time out");
-		else {
-			for (VariableBinding vb : vbs) {
-	            System.out.println(vb.getVariable().toString());
-	        }
-		}
-		*/
-		
-		// test snmpset
-		snmpGet(target,".1.3.6.1.2.1.1.6.0");
-		if(snmpSet(target, ".1.3.6.1.2.1.1.6.0", "Hello") == true)
-			snmpGet(target,".1.3.6.1.2.1.1.6.0");
-		else 
-			System.out.println("Error");
+		return target;
 	}
+
+
 	public static boolean snmpSet(Target target, String oid, String value) throws Exception {
 		TransportMapping<? extends Address> transport = new DefaultUdpTransportMapping();
 		Snmp snmp = new Snmp(transport);
 		transport.listen();
-		
+
 		PDU pdu = new PDU();
-	    pdu.add(new VariableBinding(new OID(oid), new OctetString(value)));
-	    pdu.setType(PDU.SET);
-	    pdu.setRequestID(new Integer32(1));
-	    
-	    ResponseEvent event = snmp.send(pdu, target);
-	    if (event != null) {
-	        pdu = event.getResponse();
-	        if (pdu.getErrorStatus() == PDU.noError) {
-	        	 snmp.close();
-	        	return true;
-	          //System.out.println("SNMPv3 SET Successful!");
-	        } else {
-	        	 snmp.close();
-	        	return false;
-	          //System.out.println("SNMPv3 SET Unsuccessful.");
-	        }
-	    } else {
-	    	 snmp.close();
-	    	return false;
-	      //System.out.println("SNMP send unsuccessful.");
-	    }  
+		pdu.add(new VariableBinding(new OID(oid), new OctetString(value)));
+		pdu.setType(PDU.SET);
+		pdu.setRequestID(new Integer32(1));
+
+		ResponseEvent event = snmp.send(pdu, target);
+		if (event != null) {
+			pdu = event.getResponse();
+			if (pdu.getErrorStatus() == PDU.noError) {
+				snmp.close();
+				return true;
+				// System.out.println("SNMPv3 SET Successful!");
+			} else {
+				snmp.close();
+				return false;
+				// System.out.println("SNMPv3 SET Unsuccessful.");
+			}
+		} else {
+			snmp.close();
+			return false;
+			// System.out.println("SNMP send unsuccessful.");
+		}
 	}
-	public static void snmpGet( Target target, String oid) throws IOException {
+
+	public static Map<String, String> snmpGet(Target target, String oid) throws IOException {
+		Map<String, String> result = new TreeMap<String, String>();
 		TransportMapping<? extends Address> transport = new DefaultUdpTransportMapping();
 		Snmp snmp = new Snmp(transport);
 		transport.listen();
-		
-	 // Create the PDU object
-	    PDU pdu = new PDU();
-	    pdu.add(new VariableBinding(new OID(oid)));
-	    pdu.setType(PDU.GET);
-	    pdu.setRequestID(new Integer32(1));
 
-	    
-	    System.out.println("Sending Request to Agent...");
-	    ResponseEvent response = snmp.get(pdu, target);
-
-	    // Process Agent Response
-	    if (response != null)
-	    {
-	      System.out.println("Got Response from Agent");
-	      PDU responsePDU = response.getResponse();
-
-	      if (responsePDU != null)
-	      {
-	        int errorStatus = responsePDU.getErrorStatus();
-	        int errorIndex = responsePDU.getErrorIndex();
-	        String errorStatusText = responsePDU.getErrorStatusText();
-
-	        if (errorStatus == PDU.noError)
-	        {
-	          System.out.println("Snmp Get Response = " + responsePDU.getVariableBindings());
-	        }
-	        else
-	        {
-	          System.out.println("Error: Request Failed");
-	          System.out.println("Error Status = " + errorStatus);
-	          System.out.println("Error Index = " + errorIndex);
-	          System.out.println("Error Status Text = " + errorStatusText);
-	        }
-	      }
-	      else
-	      {
-	        System.out.println("Error: Response PDU is null");
-	      }
-	    }
-	    else
-	    {
-	      System.out.println("Error: Agent Timeout... ");
-	    }
-	    snmp.close();	    	
-	}
-	public static void snmGetNext(Target target, String oid) throws IOException{
-		TransportMapping<? extends Address> transport = new DefaultUdpTransportMapping();
-		Snmp snmp = new Snmp(transport);
-		transport.listen();
-		
 		// Create the PDU object
-	    PDU pdu = new PDU();
-	    pdu.add(new VariableBinding(new OID(oid))); //Querying GetNext of sysDescr will get the sysObjectID OID value
-	    pdu.setRequestID(new Integer32(1));
-	    pdu.setType(PDU.GETNEXT);
+		PDU pdu = new PDU();
+		pdu.add(new VariableBinding(new OID(oid)));
+		pdu.setType(PDU.GET);
+		pdu.setRequestID(new Integer32(1));
 
-	    
-	    ResponseEvent response = snmp.getNext(pdu, target);
+		System.out.println("Sending Request to Agent...");
+		ResponseEvent response = snmp.get(pdu, target);
 
-	    // Process Agent Response
-	    if (response != null)
-	    {
-	      System.out.println("\nResponse:\nGot GetNext Response from Agent...");
-	      PDU responsePDU = response.getResponse();
+		// Process Agent Response
+		if (response != null) {
+			System.out.println("Got Response from Agent");
+			PDU responsePDU = response.getResponse();
+			if (responsePDU != null) {
+				int errorStatus = responsePDU.getErrorStatus();
+				int errorIndex = responsePDU.getErrorIndex();
+				String errorStatusText = responsePDU.getErrorStatusText();
 
-	      if (responsePDU != null)
-	      {
-	        int errorStatus = responsePDU.getErrorStatus();
-	        int errorIndex = responsePDU.getErrorIndex();
-	        String errorStatusText = responsePDU.getErrorStatusText();
-
-	        if (errorStatus == PDU.noError)
-	        {
-	          System.out.println("Snmp GetNext Response for sysObjectID = " + responsePDU.getVariableBindings());
-	        }
-	        else
-	        {
-	          System.out.println("Error: Request Failed");
-	          System.out.println("Error Status = " + errorStatus);
-	          System.out.println("Error Index = " + errorIndex);
-	          System.out.println("Error Status Text = " + errorStatusText);
-	        }
-	      }
-	      else
-	      {
-	        System.out.println("Error: GetNextResponse PDU is null");
-	      }
-	    }
-	    else
-	    {
-	      System.out.println("Error: Agent Timeout... ");
-	    }
-	    snmp.close();
+				if (errorStatus == PDU.noError) {
+					// ?
+					Vector<? extends VariableBinding> vbs = responsePDU.getVariableBindings();
+					VariableBinding vb = vbs.firstElement();
+					result.put(vb.getOid().toString(), vb.getVariable().toString());
+					return result;
+					// System.out.println("Snmp Get Response = " +
+					// responsePDU.getVariableBindings());
+				}
+			}
+		}
+		snmp.close();
+		return null;
 	}
+
+	public static Map<String, String> snmpGetNext(Target target, String oid) throws IOException {
+		Map<String, String> result = new TreeMap();
+		TransportMapping<? extends Address> transport = new DefaultUdpTransportMapping();
+		Snmp snmp = new Snmp(transport);
+		transport.listen();
+
+		// Create the PDU object
+		PDU pdu = new PDU();
+		pdu.add(new VariableBinding(new OID(oid))); // Querying GetNext of sysDescr will get the sysObjectID OID value
+		pdu.setRequestID(new Integer32(1));
+		pdu.setType(PDU.GETNEXT);
+
+		ResponseEvent response = snmp.getNext(pdu, target);
+
+		// Process Agent Response
+		if (response != null) {
+			System.out.println("\nResponse:\nGot GetNext Response from Agent...");
+			PDU responsePDU = response.getResponse();
+
+			if (responsePDU != null) {
+				int errorStatus = responsePDU.getErrorStatus();
+				int errorIndex = responsePDU.getErrorIndex();
+				String errorStatusText = responsePDU.getErrorStatusText();
+
+				if (errorStatus == PDU.noError) {
+					Vector<? extends VariableBinding> vbs = responsePDU.getVariableBindings();
+					VariableBinding vb = vbs.firstElement();
+					result.put(vb.getOid().toString(), vb.getVariable().toString());
+					snmp.close();
+					return result;
+					// System.out.println("Snmp GetNext Response for sysObjectID = " +
+					// responsePDU.getVariableBindings());
+				}
+			}
+		}
+		snmp.close();
+		return null;
+	}
+
 	public static Map<String, String> doWalk(String tableOid, Target target) throws IOException {
 		Map<String, String> result = new TreeMap<String, String>();
 		TransportMapping<? extends Address> transport = new DefaultUdpTransportMapping();
@@ -229,51 +198,48 @@ public static void main(String[] args) throws Exception {
 			if (varBindings == null || varBindings.length == 0) {
 				continue;
 			}
-			
+
 			for (VariableBinding varBinding : varBindings) {
 				if (varBinding == null) {
 					continue;
 				}
-				
+
 				result.put("." + varBinding.getOid().toString(), varBinding.getVariable().toString());
 			}
 		}
 		snmp.close();
 		return result;
 	}
-	public static Vector<? extends VariableBinding> getBulk(Target target, VariableBinding[] array)  throws IOException{
+
+	public static Map<String, String> getBulk(Target target, VariableBinding[] array) throws IOException {
+		Map<String, String> result = new TreeMap<String, String>();
 		TransportMapping<? extends Address> transport = new DefaultUdpTransportMapping();
 		Snmp snmp = new Snmp(transport);
 		transport.listen();
-		
+
 		PDU pdu = new PDU();
-	    pdu.setType(PDU.GETBULK);
-	    pdu.setMaxRepetitions(1); 
-	    pdu.setNonRepeaters(0);
-	    pdu.addAll(array);
+		pdu.setType(PDU.GETBULK);
+		pdu.setMaxRepetitions(1);
+		pdu.setNonRepeaters(0);
+		pdu.addAll(array);
 
-	    //pdu.add(new VariableBinding(new OID("1.3.6.1.4.1.2000.1.2.5.1.3"))); 
+		// pdu.add(new VariableBinding(new OID("1.3.6.1.4.1.2000.1.2.5.1.3")));
 
-	    ResponseEvent responseEvent = snmp.send(pdu, target);
-	    PDU response = responseEvent.getResponse();
+		ResponseEvent responseEvent = snmp.send(pdu, target);
+		PDU response = responseEvent.getResponse();
 
-	    if (response == null) {
-		    System.out.println("TimeOut...");
-	    } else {
-		    if (response.getErrorStatus() == PDU.noError) {
-                Vector<? extends VariableBinding> vbs = response.getVariableBindings();
-                return vbs;
-                //for (VariableBinding vb : vbs) {
-                  //  System.out.println(vb.getVariable().toString());
-		        //}
-		    } else {
-		    	return null;
-		        //System.out.println("Error:" + response.getErrorStatusText());
-		    }
-	    }
-	    return null;
+		if (response != null) {
+			if (response.getErrorStatus() == PDU.noError) {
+				Vector<? extends VariableBinding> vbs = response.getVariableBindings();
+
+				for (VariableBinding vb : vbs) {
+					// System.out.println(vb.getVariable().toString());
+					result.put(vb.getOid().toString(), vb.getVariable().toString());
+				}
+				return result;
+			}
+		}
+		return null;
 	}
 
 }
-
-
